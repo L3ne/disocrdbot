@@ -1,5 +1,5 @@
 const { Client, Events, GatewayIntentBits, EmbedBuilder, Partials, ActionRowBuilder, StringSelectMenuBuilder, ActivityType } = require('discord.js')
-let { token, admins, botName, fakeServers, advancedOptions } = require('./config.json') // Kabooma Duck Config v2.0 / config.json / Updated 7.25.2023 / Check README for info
+let { token, admins, botName, fakeServers, advancedOptions } = require('./config.json')
 const axios = require('axios').default 
 // CMD Dependencies
 const chalk = require('chalk')
